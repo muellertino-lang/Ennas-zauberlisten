@@ -1,0 +1,49 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ennas Zauberlisten</title><style>body{font-family:system-ui,sans-serif;background:#fff0f8;color:#673267;margin:0;padding:18px;max-width:760px;margin:auto}h1{color:#aa3185}button,input{font:inherit}button{border:0;border-radius:15px;padding:12px;background:#a72f81;color:white;cursor:pointer}button:disabled{opacity:.5}.card{background:white;border-radius:18px;padding:16px;margin:12px 0;box-shadow:0 2px 12px #d4a2c033}.task{display:flex;gap:9px;align-items:center;background:#fff5fa;padding:10px;margin:9px 0;border-radius:12px}.task img{width:65px;height:65px;object-fit:cover;border-radius:12px}.task .emoji{font-size:38px;width:65px;text-align:center}.task span.name{flex:1}.task.done .name{text-decoration:line-through;opacity:.5}.task input{width:24px;height:24px}.task button{padding:9px}.muted{color:#865d7b}.hidden{display:none}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}input[type=text]{padding:12px;border:2px solid #edb9d9;border-radius:12px;max-width:90%}.small{font-size:13px}#status{min-height:1.4em}</style></head><body><h1>🦄 Ennas Zauberlisten</h1><p class="muted">Meine Aufgaben und Abenteuer ✨</p><button id="new">➕ Neue Checkliste</button><div id="lists"></div><section id="editor" class="card hidden"><div class="row"><button id="back">← Alle Listen</button><button id="delete">🗑 Liste löschen</button></div><h2 id="heading"></h2><div class="row"><input id="taskText" type="text" placeholder="Neue Aufgabe …"><button id="mic" type="button">🎤 Sprechen</button><button id="add">➕ Hinzufügen</button></div><p id="status" class="small muted" role="status" aria-live="polite"></p><p class="small muted">Tipp: Wenn der Mikrofonknopf nicht funktioniert, tippe ins Textfeld und nutze das Mikrofon deiner Android-Tastatur. Die Browser-Spracherkennung funktioniert am zuverlässigsten über eine HTTPS-Webadresse.</p><div id="tasks"></div><p class="small muted">Zum Sortieren die Pfeile benutzen oder einen Eintrag mit dem Finger ziehen. Bilder sind zunächst passende Symbole.</p></section><script>
+const KEY='enna-zauberlisten-v1';let lists=JSON.parse(localStorage.getItem(KEY)||'[]'),active=null;const $=id=>document.getElementById(id),save=()=>localStorage.setItem(KEY,JSON.stringify(lists));const icons=[['zahn','🪥'],['putz','🧹'],['anzieh','👕'],['kleid','👗'],['frühstück','🥐'],['essen','🍽️'],['trink','🥤'],['rucksack','🎒'],['tasche','🎒'],['schuh','👟'],['bett','🛏️'],['spiel','🧸'],['buch','📚'],['lesen','📖'],['hausaufgabe','✏️'],['hund','🐶'],['katze','🐱'],['bad','🛁'],['dusche','🚿'],['haar','🪮'],['schlaf','🌙'],['sport','🏃'],['fahrrad','🚲'],['aufräum','🧺']];function emoji(s){return icons.find(([k])=>s.toLowerCase().includes(k))?.[1]||'🌟'}function current(){return lists.find(x=>x.id===active)}function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}function showLists(){active=null;$('editor').classList.add('hidden');$('lists').replaceChildren();lists.forEach(l=>{const c=el('div','card'),b=el('button','',`📋 ${l.name} (${l.tasks.filter(t=>t.done).length}/${l.tasks.length})`);b.onclick=()=>open(l.id);c.append(b);$('lists').append(c)})}function open(id){active=id;$('editor').classList.remove('hidden');$('heading').textContent=current().name;render()}function move(i,j){let a=current().tasks;if(j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];save();render()}let successAudioContext=null;
+function playSuccessSound(){
+  try{
+    const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+    if(!AudioContextClass)return;
+    if(!successAudioContext)successAudioContext=new AudioContextClass();
+    const ctx=successAudioContext;
+    if(ctx.state==='suspended')ctx.resume().catch(()=>{});
+    const start=ctx.currentTime+0.015;
+    [523.25,659.25,783.99,1046.5].forEach((frequency,index)=>{
+      const oscillator=ctx.createOscillator();
+      const gain=ctx.createGain();
+      const t=start+index*0.085;
+      oscillator.type='sine';
+      oscillator.frequency.setValueAtTime(frequency,t);
+      gain.gain.setValueAtTime(0.0001,t);
+      gain.gain.exponentialRampToValueAtTime(0.17,t+0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001,t+0.23);
+      oscillator.connect(gain);gain.connect(ctx.destination);
+      oscillator.start(t);oscillator.stop(t+0.24);
+    });
+  }catch(e){console.warn('Erfolgston nicht verfügbar',e)}
+}
+function render(){const root=$('tasks');root.replaceChildren();current().tasks.forEach((t,i)=>{const row=el('div','task'+(t.done?' done':''));row.draggable=true;row.ondragstart=e=>e.dataTransfer.setData('text/plain',String(i));row.ondragover=e=>e.preventDefault();row.ondrop=e=>{e.preventDefault();move(Number(e.dataTransfer.getData('text/plain')),i)};const check=el('input');check.type='checkbox';check.checked=t.done;check.onchange=()=>{if(check.checked&&!t.done)playSuccessSound();t.done=check.checked;save();render()};const pic=el('span','emoji',emoji(t.text));const name=el('span','name',t.text),speak=el('button','','🔊'),up=el('button','','↑'),down=el('button','','↓'),del=el('button','','✕');speak.setAttribute('aria-label','Vorlesen');speak.onclick=()=>{if(!('speechSynthesis'in window)){alert('Vorlesen wird hier nicht unterstützt');return}speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(t.text);u.lang='de-DE';u.rate=.85;speechSynthesis.speak(u)};up.onclick=()=>move(i,i-1);down.onclick=()=>move(i,i+1);del.onclick=()=>{current().tasks.splice(i,1);save();render()};row.append(check,pic,name,speak,up,down,del);root.append(row)});if(current().tasks.length&&current().tasks.every(t=>t.done))root.append(el('h2','','🎉 Super gemacht, Enna! 🌈'))}function add(){let text=$('taskText').value.trim();if(!text)return;current().tasks.push({text,done:false});$('taskText').value='';save();render()}$('new').onclick=()=>{let name=prompt('Wie heißt deine neue Liste?','Meine Zauberliste?');if(name===null)return;let l={id:String(Date.now()),name:name.trim()||'Meine Liste',tasks:[]};lists.push(l);save();open(l.id)};$('back').onclick=showLists;$('delete').onclick=()=>{if(confirm('Diese Liste wirklich löschen?')){lists=lists.filter(l=>l.id!==active);save();showLists()}};$('add').onclick=add;$('taskText').onkeydown=e=>{if(e.key==='Enter')add()};let recognition=null;
+function setStatus(message){$('status').textContent=message}
+function speechError(code){const messages={
+'not-allowed':'Mikrofonzugriff verweigert. Erlaube das Mikrofon in den Browser-Einstellungen und öffne die Website möglichst über HTTPS.',
+'service-not-allowed':'Der Browser erlaubt den Spracherkennungsdienst nicht. Nutze das Mikrofon auf der Android-Tastatur.',
+'network':'Die Spracherkennung konnte den Onlinedienst nicht erreichen. Prüfe Internet und versuche Chrome über HTTPS.',
+'no-speech':'Keine Sprache erkannt. Sprich deutlich und versuche es erneut.',
+'audio-capture':'Kein Mikrofon verfügbar. Prüfe die Mikrofonberechtigung des Browsers.',
+'aborted':'Aufnahme abgebrochen.',
+'language-not-supported':'Deutsch wird von dieser Spracherkennung nicht unterstützt.'};
+return messages[code]||('Spracherkennung fehlgeschlagen ('+code+'). Alternativ das Tastaturmikrofon nutzen.')}
+$('mic').onclick=()=>{
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SR){setStatus('Dieser Browser bietet keine direkte Spracherkennung. Tippe ins Textfeld und nutze das Mikrofon deiner Tastatur.');$('taskText').focus();return}
+ if(location.protocol==='file:'){setStatus('Die Seite ist als Datei geöffnet. Die Browser-Spracherkennung kann dadurch blockiert werden. Nutze das Tastaturmikrofon oder veröffentliche die Seite über HTTPS.');$('taskText').focus();return}
+ if(!window.isSecureContext){setStatus('Für die Mikrofonfunktion ist eine sichere HTTPS-Webadresse nötig. Bis dahin kannst du das Tastaturmikrofon verwenden.');$('taskText').focus();return}
+ if(recognition){try{recognition.abort()}catch(e){}recognition=null}
+ let rec=new SR();recognition=rec;rec.lang='de-DE';rec.interimResults=false;rec.maxAlternatives=1;
+ let gotResult=false,gotError=false;
+ rec.onresult=e=>{gotResult=true;const transcript=e.results?.[0]?.[0]?.transcript?.trim();if(transcript){$('taskText').value=transcript;setStatus('✅ „'+transcript+'“ erkannt. Jetzt auf Hinzufügen tippen.')}else setStatus('Kein Text erkannt. Bitte erneut versuchen.')};
+ rec.onerror=e=>{gotError=true;setStatus(speechError(e.error||'unbekannt'))};
+ rec.onend=()=>{if(recognition===rec)recognition=null;if(!gotResult&&!gotError)setStatus('Aufnahme beendet, aber kein Text erkannt. Versuche es erneut oder nutze das Tastaturmikrofon.')};
+ try{setStatus('🎤 Ich höre zu …');rec.start()}catch(e){recognition=null;setStatus('Mikrofon konnte nicht gestartet werden: '+e.message+'. Nutze alternativ das Tastaturmikrofon.')}
+};showLists();
+</script></body></html>
